@@ -22,6 +22,7 @@ import { useZoom } from '../../hooks/useZoom';
 import type { CanvasProps, CanvasSpec, Point } from '../../model';
 import { buildGraphFromQueries } from '../../utils/graphGeneration';
 import { layoutGraph } from '../../utils/graphLayout';
+import { scaleFromThresholds } from '../../utils/panelUtils';
 import { nodeBoundingBox } from '../../utils/resizeUtils';
 import { BackgroundLayer, GlobalBackgroundLayer } from '../shared/BackgroundLayer';
 import { PanelEdgeLayer } from './PanelEdgeLayer';
@@ -52,8 +53,37 @@ function PanelSvg({
 }: PanelSvgProps): ReactElement {
   const { transform, isPanning, fitView, resetPan } = useZoomContext();
 
-  const nodes = useMemo(() => spec.nodes ?? [], [spec.nodes]);
-  const backgrounds = useMemo(() => spec.backgrounds ?? [], [spec.backgrounds]);
+  // Resolve node sizes up front so both layers share one geometry: nodes render at their scaled
+  // size and edges clip to that same scaled boundary. Scaling only widens/heightens a node, which
+  // keeps it centered on its position.
+  const sizedSpec = useMemo(() => {
+    const steps = spec.nodeThresholdSizes;
+    const specNodes = spec.nodes ?? [];
+    if (!steps?.length || !specNodes.some((n) => n.sizeMode === 'threshold')) {
+      return spec;
+    }
+    const nextNodes = specNodes.map((node) => {
+      if (node.sizeMode !== 'threshold') {
+        return node;
+      }
+      const series =
+        seriesByItemId?.get(node.id) ??
+        (node.queryIndex !== undefined ? seriesByQueryIndex.get(node.queryIndex) : undefined);
+      const lastValue = series?.values[series.values.length - 1]?.[1];
+      if (lastValue === null || lastValue === undefined) {
+        return node;
+      }
+      const scale = scaleFromThresholds(lastValue, steps);
+      if (scale === 1) {
+        return node;
+      }
+      return Object.assign({}, node, { width: node.width * scale, height: node.height * scale });
+    });
+    return { ...spec, nodes: nextNodes };
+  }, [spec, seriesByItemId, seriesByQueryIndex]);
+
+  const nodes = useMemo(() => sizedSpec.nodes ?? [], [sizedSpec.nodes]);
+  const backgrounds = useMemo(() => sizedSpec.backgrounds ?? [], [sizedSpec.backgrounds]);
 
   const width = contentDimensions?.width ?? 600;
   const height = contentDimensions?.height ?? 400;
@@ -101,14 +131,14 @@ function PanelSvg({
       <g transform={transform.toString()}>
         <BackgroundLayer backgrounds={backgrounds} />
         <PanelNodeLayer
-          spec={spec}
+          spec={sizedSpec}
           seriesByQueryIndex={seriesByQueryIndex}
           k={transform.k}
           paletteColors={paletteColors}
           seriesByItemId={seriesByItemId}
         />
         <PanelEdgeLayer
-          spec={spec}
+          spec={sizedSpec}
           seriesByQueryIndex={seriesByQueryIndex}
           k={transform.k}
           paletteColors={paletteColors}
@@ -198,7 +228,7 @@ export function CanvasPanel(props: CanvasProps): ReactElement | null {
     return { ...spec, nodes, edges: generated.edges };
   }, [spec, generated, positions, props.contentDimensions?.width, props.contentDimensions?.height]);
 
-  const { svgRef, toCanvasPoint, transform, isPanning, fitView, resetPan } = useZoom();
+  const { svgRef, toCanvasPoint, transform, isPanning, fitView, resetPan } = useZoom({ interactionMode: 'view' });
 
   const zoomValue = useMemo(
     () => ({ toCanvasPoint, transform, isPanning, fitView, resetPan }),
