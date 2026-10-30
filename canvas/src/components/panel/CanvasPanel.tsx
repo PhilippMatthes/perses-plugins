@@ -228,7 +228,7 @@ export function CanvasPanel(props: CanvasProps): ReactElement | null {
     return { ...spec, nodes, edges: generated.edges };
   }, [spec, generated, positions, props.contentDimensions?.width, props.contentDimensions?.height]);
 
-  const { svgRef, toCanvasPoint, transform, isPanning, fitView, resetPan } = useZoom();
+  const { svgRef, toCanvasPoint, transform, isPanning, fitView, resetPan } = useZoom({ interactionMode: 'view' });
 
   const zoomValue = useMemo(
     () => ({ toCanvasPoint, transform, isPanning, fitView, resetPan }),
