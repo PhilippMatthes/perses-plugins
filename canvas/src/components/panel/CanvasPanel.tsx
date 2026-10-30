@@ -74,11 +74,24 @@ function PanelSvg({
 
   const showLegend = spec.legend !== undefined && spec.thresholds !== undefined;
   const thresholds = spec.thresholds ?? EMPTY_THRESHOLDS;
+  // Show a separate edge legend only when edges use their own color scheme; otherwise they share the
+  // node colors and a single legend already describes both.
+  const edgeThresholds = spec.edgeThresholds;
   const legendPosition = spec.legend?.position ?? 'bottom';
   const LEGEND_MARGIN = 8;
-  const legendX = legendPosition === 'right' ? width - 118 - LEGEND_MARGIN : LEGEND_MARGIN;
-  const legendY =
-    legendPosition === 'right' ? LEGEND_MARGIN : height - ((spec.thresholds?.steps?.length ?? 0) + 1) * 18 - 24;
+  const LEGEND_WIDTH = 110;
+  const LEGEND_GAP = 8;
+  const nodeLegendRows = (spec.thresholds?.steps?.length ?? 0) + 1;
+  // Node and edge legends carry a title (16px) only when both are shown; a lone legend has none.
+  const titleHeight = edgeThresholds ? 16 : 0;
+  const nodeLegendHeight = nodeLegendRows * 18 + 16 + titleHeight;
+  const legendX = legendPosition === 'right' ? width - LEGEND_WIDTH - LEGEND_MARGIN : LEGEND_MARGIN;
+  const legendY = legendPosition === 'right' ? LEGEND_MARGIN : height - nodeLegendHeight - 16;
+  // Place the edge legend beside the node legend on the bottom, or stacked below it on the right.
+  const edgeLegendPos =
+    legendPosition === 'right'
+      ? { x: legendX, y: legendY + nodeLegendHeight + LEGEND_GAP }
+      : { x: legendX + LEGEND_WIDTH + LEGEND_GAP, y: legendY };
 
   const svgStyle = useMemo(() => ({ ...SVG_STYLE_BASE, cursor: isPanning ? 'grabbing' : 'grab' }), [isPanning]);
 
@@ -110,6 +123,16 @@ function PanelSvg({
           format={spec.format}
           paletteColors={paletteColors}
           position={{ x: legendX, y: legendY }}
+          title={edgeThresholds ? 'Nodes' : undefined}
+        />
+      ) : null}
+      {showLegend && edgeThresholds ? (
+        <ThresholdLegend
+          thresholds={edgeThresholds}
+          format={spec.format}
+          paletteColors={paletteColors}
+          position={edgeLegendPos}
+          title="Edges"
         />
       ) : null}
     </svg>
